@@ -1,186 +1,276 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Search, Filter, ArrowUpDown } from "lucide-react";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { mockTransactions } from "../data/mockData";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  createTransaction,
+  deleteTransaction,
+  getTransactions,
+  updateTransaction,
+} from "../api";
 
 export function Transactions() {
+  const userId = 1;
+
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterCategory, setFilterCategory] = useState("all");
   const [sortBy, setSortBy] = useState("date");
 
-  const categories = ["all", ...Array.from(new Set(mockTransactions.map(t => t.category)))];
+  const [amount, setAmount] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [type, setType] = useState("DEBIT");
 
-  const filteredTransactions = mockTransactions
-    .filter(txn => {
-      const matchesSearch = txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                           txn.category.toLowerCase().includes(searchQuery.toLowerCase());
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editType, setEditType] = useState("DEBIT");
+
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const data = await getTransactions(userId);
+
+      const formatted = data.map((txn: any) => ({
+        id: txn.id,
+        amount: txn.amount,
+        category: txn.category || "other",
+        description: txn.description || "No description",
+        type: txn.type || "DEBIT",
+        date: txn.timestamp,
+      }));
+
+      setTransactions(formatted);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!amount || !category || !description) {
+      alert("Please fill all fields");
+      return;
+    }
+
+    await createTransaction({
+      amount: Number(amount),
+      category,
+      description,
+      type,
+      userId,
+    });
+
+    setAmount("");
+    setCategory("");
+    setDescription("");
+    setType("DEBIT");
+    fetchTransactions();
+  };
+
+  const handleDelete = async (id: number) => {
+    await deleteTransaction(id);
+    fetchTransactions();
+  };
+
+  const startEdit = (txn: any) => {
+    setEditingId(txn.id);
+    setEditAmount(String(txn.amount));
+    setEditCategory(txn.category);
+    setEditDescription(txn.description);
+    setEditType(txn.type || "DEBIT");
+  };
+
+  const handleUpdate = async () => {
+    if (editingId == null) return;
+
+    await updateTransaction(editingId, {
+      amount: Number(editAmount),
+      category: editCategory,
+      description: editDescription,
+      type: editType,
+    });
+
+    setEditingId(null);
+    setEditAmount("");
+    setEditCategory("");
+    setEditDescription("");
+    setEditType("DEBIT");
+    fetchTransactions();
+  };
+
+  const categories = ["all", ...Array.from(new Set(transactions.map((t) => t.category)))];
+
+  const filteredTransactions = transactions
+    .filter((txn) => {
+      const matchesSearch =
+        txn.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        txn.category.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchesCategory = filterCategory === "all" || txn.category === filterCategory;
       return matchesSearch && matchesCategory;
     })
     .sort((a, b) => {
-      if (sortBy === "date") {
-        return new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (sortBy === "amount") {
-        return b.amount - a.amount;
-      }
+      if (sortBy === "date") return new Date(b.date).getTime() - new Date(a.date).getTime();
+      if (sortBy === "amount") return b.amount - a.amount;
       return 0;
     });
 
   const groupedByDate = filteredTransactions.reduce((acc, txn) => {
-    const date = new Date(txn.date).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
+    const date = new Date(txn.date).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
     });
-    if (!acc[date]) {
-      acc[date] = [];
-    }
+    if (!acc[date]) acc[date] = [];
     acc[date].push(txn);
     return acc;
-  }, {} as Record<string, typeof mockTransactions>);
+  }, {} as Record<string, any[]>);
 
-  const totalSpent = filteredTransactions
-    .filter(t => t.type === "debit")
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  const totalIncome = filteredTransactions
-    .filter(t => t.type === "credit")
-    .reduce((sum, t) => sum + t.amount, 0);
+  if (loading) {
+    return <div className="p-4">Loading transactions...</div>;
+  }
 
   return (
-    <div className="pb-4 bg-background text-foreground">
-      
-      {/* Header */}
-      <div className="sticky top-0 bg-card border-b border-border p-4 space-y-4 z-10">
-        <div>
-          <h1 className="text-2xl">Transactions</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            All your transactions from SMS analysis
-          </p>
+    <div className="p-4 space-y-4">
+      <h1 className="text-2xl font-semibold">Transactions</h1>
+
+      <Card className="p-4 space-y-3">
+        <h2 className="font-semibold">Add Transaction</h2>
+
+        <div className="grid gap-2">
+          <Input placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <Input placeholder="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
+          <Input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+
+          <Select value={type} onValueChange={setType}>
+            <SelectTrigger>
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="DEBIT">DEBIT</SelectItem>
+              <SelectItem value="CREDIT">CREDIT</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <button onClick={handleAdd} className="bg-blue-500 text-white px-3 py-2 rounded">
+            Add Transaction
+          </button>
         </div>
+      </Card>
 
-        {/* Stats */}
-        <div className="flex gap-3">
-          <Card className="flex-1 p-3 bg-muted border-border">
-            <p className="text-xs text-muted-foreground">Income</p>
-            <p className="text-lg text-green-500 mt-1">
-              ₹{totalIncome.toLocaleString()}
-            </p>
-          </Card>
-
-          <Card className="flex-1 p-3 bg-muted border-border">
-            <p className="text-xs text-muted-foreground">Spent</p>
-            <p className="text-lg text-red-500 mt-1">
-              ₹{totalSpent.toLocaleString()}
-            </p>
-          </Card>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search transactions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 bg-input border-border"
-            />
-          </div>
-          
-          <div className="flex gap-2">
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="flex-1 bg-input border-border">
-                <div className="flex items-center gap-2">
-                  <Filter className="w-4 h-4 text-muted-foreground" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map(cat => (
-                  <SelectItem key={cat} value={cat}>
-                    {cat === "all" ? "All Categories" : cat}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={sortBy} onValueChange={setSortBy}>
-              <SelectTrigger className="flex-1 bg-input border-border">
-                <div className="flex items-center gap-2">
-                  <ArrowUpDown className="w-4 h-4 text-muted-foreground" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="date">Sort by Date</SelectItem>
-                <SelectItem value="amount">Sort by Amount</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input
+          placeholder="Search transactions..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
-      {/* Transactions List */}
-      <div className="p-4 space-y-6">
-        {Object.entries(groupedByDate).map(([date, transactions]) => (
-          <div key={date}>
-            <p className="text-sm text-muted-foreground mb-2 px-1">
-              {date}
-            </p>
+      <div className="flex gap-2">
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="flex-1">
+            <Filter className="w-4 h-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {categories.map((cat) => (
+              <SelectItem key={cat} value={cat}>
+                {cat}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
-            <Card className="divide-y divide-border bg-card">
-              {transactions.map((txn) => (
-                <div key={txn.id} className="p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium truncate">
-                          {txn.description}
-                        </p>
-                        {txn.smsSource && (
-                          <Badge variant="outline" className="text-xs shrink-0">
-                            SMS
-                          </Badge>
-                        )}
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="flex-1">
+            <ArrowUpDown className="w-4 h-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="date">Date</SelectItem>
+            <SelectItem value="amount">Amount</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-4">
+        {Object.entries(groupedByDate).map(([date, txns]) => (
+          <div key={date}>
+            <p className="text-sm mb-2">{date}</p>
+
+            <Card className="divide-y">
+              {txns.map((txn: any) => (
+                <div key={txn.id} className="p-4 space-y-3">
+                  {editingId === txn.id ? (
+                    <div className="space-y-2">
+                      <Input value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                      <Input value={editCategory} onChange={(e) => setEditCategory(e.target.value)} />
+                      <Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+
+                      <Select value={editType} onValueChange={setEditType}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DEBIT">DEBIT</SelectItem>
+                          <SelectItem value="CREDIT">CREDIT</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <div className="flex gap-2">
+                        <button onClick={handleUpdate} className="bg-green-600 text-white px-3 py-2 rounded">
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          className="bg-gray-500 text-white px-3 py-2 rounded"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between">
+                      <div>
+                        <p className="font-medium">{txn.description}</p>
+                        <p className="text-sm text-muted-foreground">{txn.category}</p>
+                        <p className="text-xs text-muted-foreground">{txn.type}</p>
                       </div>
 
-                      <p className="text-sm text-muted-foreground">
-                        {txn.category}
-                      </p>
-
-                      {txn.merchant && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {txn.merchant}
+                      <div className="text-right space-y-1">
+                        <p className={txn.type === "CREDIT" ? "text-green-600" : ""}>
+                          {txn.type === "CREDIT" ? "+" : "-"}₹{txn.amount}
                         </p>
-                      )}
-                    </div>
 
-                    <div className="text-right">
-                      <p
-                        className={`font-semibold ${
-                          txn.type === "credit"
-                            ? "text-green-500"
-                            : "text-foreground"
-                        }`}
-                      >
-                        {txn.type === "credit" ? "+" : "-"}₹
-                        {txn.amount.toLocaleString()}
-                      </p>
-
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(txn.date).toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => startEdit(txn)} className="text-blue-600 text-xs">
+                            Edit
+                          </button>
+                          <button onClick={() => handleDelete(txn.id)} className="text-red-600 text-xs">
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ))}
             </Card>
@@ -188,11 +278,7 @@ export function Transactions() {
         ))}
 
         {filteredTransactions.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              No transactions found
-            </p>
-          </div>
+          <div className="text-center py-10 text-muted-foreground">No transactions</div>
         )}
       </div>
     </div>
