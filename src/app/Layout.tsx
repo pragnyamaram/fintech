@@ -6,6 +6,7 @@ import {
   CreditCard,
   Target,
   Sparkles,
+  MessageCircle,
 } from "lucide-react";
 
 export function AppLayout() {

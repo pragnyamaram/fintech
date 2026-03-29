@@ -4,11 +4,14 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Progress } from "../components/ui/progress";
 import { mockGoals } from "../data/mockData";
+import { useEffect, useState } from "react";
+import { getGoals } from "../api";
 
 export function Goals() {
   const totalTargetAmount = mockGoals.reduce((sum, g) => sum + g.targetAmount, 0);
   const totalCurrentAmount = mockGoals.reduce((sum, g) => sum + g.currentAmount, 0);
   const overallProgress = (totalCurrentAmount / totalTargetAmount) * 100;
+  const [goals, setGoals] = useState<any[]>([]);
 
   const getProgressStatus = (goal: typeof mockGoals[0]) => {
     const progress = (goal.currentAmount / goal.targetAmount) * 100;
@@ -33,7 +36,18 @@ export function Goals() {
       default: return "secondary";
     }
   };
+  useEffect(() => {
+    loadGoals();
+  }, []);
 
+  const loadGoals = async () => {
+    try {
+      const data = await getGoals(1);
+      setGoals(data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
   return (
     <div className="p-4 pb-24 space-y-6">
       {/* Header */}
