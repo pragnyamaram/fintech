@@ -226,5 +226,8 @@ npm run dev
 
 * GitHub: https://github.com/pragnyamaram
 * LinkedIn: https://www.linkedin.com/in/maram-pragnya-255758266/
+**Digvijay Singh**
+* GitHub: https://www.github.com/vijj918
+* LinkedIn: https://www.linkedin.com/in/digvijay-singh-9b1a79266/
 
 ---
